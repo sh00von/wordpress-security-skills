@@ -68,7 +68,19 @@ function Get-MD5([string]$s) {
 
 ## STEP 0 — ELIGIBILITY GATE (run FIRST — stop entirely if any fails)
 
-Read `readme.txt` from `$PLUGIN_DIR`. Check ALL of:
+Read `readme.txt` from `$PLUGIN_DIR`. Then fetch live active-install count from the WordPress.org API:
+
+```powershell
+# Fetch live plugin stats — use this exact endpoint (v1.2 returns active_installs reliably)
+$slug = "<plugin-slug-from-directory-name>"
+$r = Invoke-RestMethod -Uri "https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request[slug]=$slug" -UseBasicParsing
+Write-Host "Active installs: $($r.active_installs)"
+Write-Host "Version: $($r.version)"
+```
+
+> Note: The older `plugins/info/1.0/` endpoint often returns empty `downloaded` and no `active_installs`. Always use `1.2` with `?action=plugin_information&request[slug]=SLUG`.
+
+Check ALL of:
 
 | Check | Requirement |
 |---|---|
