@@ -139,21 +139,40 @@ For each entry point record: minimum role, nonce check + obtainability, capabili
 | Role | Action |
 |---|---|
 | Unauthenticated / Subscriber / Customer | Analyze fully |
+| Contributor | In scope ONLY for mVDP submissions (may not receive XP) |
 | Editor (single-site) | Skip |
 | Admin-only | Skip entirely |
 | Custom role above Subscriber/Customer caps | Skip |
+
+> **Standard program**: only Unauthenticated, Subscriber, Customer, and equivalent custom roles.
+> **mVDP only**: Contributor role is in scope but bounty XP may not apply.
 
 ---
 
 ## STEP 3 — HUNT (priority order, all must clear CVSS ≥ 6.5 / AC:L)
 
 1. Unauthenticated RCE / SQLi / File Upload / Auth Bypass
-2. Unauthenticated Privilege Escalation / Account Takeover
-3. Unauthenticated Stored XSS / SSRF / LFI / Object Injection
-4. Subscriber/Customer SQLi / File Upload / Privilege Escalation
-5. Broken Access Control on REST/AJAX with no effective gate
-6. CSRF → stored XSS, privesc, file ops (single-step, qualifying impact)
-7. Sub-Contributor Stored XSS
+2. Unauthenticated Privilege Escalation → Contributor or higher
+3. Unauthenticated Stored XSS (site-wide) / LFI (full path+ext control) / Object Injection
+4. Subscriber/Customer SQLi / File Upload / Privilege Escalation → Contributor+
+5. Broken Access Control → API keys (with impact), password hashes, backup/SQL files
+6. CSRF → single-step accepted write action (file upload, privesc, RCE, significant settings change)
+7. Reflected XSS with JS execution (site-wide, not contributor-level)
+8. IDOR → significant security impact (NOT PII-only, attachments, tickets, events, orders, appointments)
+9. DoS → crashes or defaces entire site, not dependent on excessive input volume
+
+**Conditions that auto-disqualify a finding (check before investing PoC time):**
+- XSS: contributor-level stored, HTML-only injection, CSS injection → DROP
+- File ops: no full control over BOTH path AND extension → DROP (`.phtml`-only upload → DROP)
+- Privilege escalation: leads only to below-contributor access → DROP
+- DoS: depends on excessive user input or is expected functionality → DROP
+- CSRF: multi-step, admin-notice dismissal only, IP bypass for non-critical action → DROP
+- IDOR: PII-only leakage, or interactions with attachments/tickets/events/orders/appointments → DROP
+- Settings change: no significant site impact → DROP
+- BAC: non-sensitive objects → DROP
+- Unauthenticated with only one CIA at Low → CVSS 5.3 → DROP
+- AC:H anywhere → DROP
+- Arbitrary user registration leading only to below-contributor role → DROP
 
 ---
 
@@ -163,7 +182,11 @@ Answer ALL before writing up. Drop silently if any kills exploitability.
 
 **[ ] CVSS GATE (do first)**
 - Full CVSS v3.1 vector. AC:H? → DROP. Score < 6.5? → DROP.
-- Known-rejected patterns (drop these): score 5.3, 5.4, 6.3 from low CIA combos.
+- Known-rejected patterns (drop all of these):
+  - CVSS 5.3 (unauthenticated, only one CIA at Low)
+  - CVSS 5.4 (subscriber+, two CIA at Low)
+  - CVSS 6.3 (subscriber+, three CIA at Low)
+  - Most race conditions below CVSS 7.1 → DROP
 
 **[ ] IDENTIFIER REALISM**
 - Does impact depend on an ID/token/hash? Can the target role obtain/predict it in production without admin help?
@@ -202,16 +225,21 @@ Answer ALL before writing up. Drop silently if any kills exploitability.
 
 **[ ] CSRF CHECK**
 - No nonce OR predictable/leaked nonce AND state-changing action.
-- Must be SINGLE-STEP, qualifying impact: arbitrary file upload/delete, privilege escalation, RCE (working PoC), or settings change causing wider compromise.
+- Must be SINGLE-STEP. Multi-step CSRF (e.g. CSRF to action that then requires a second admin action) → DROP.
+- Qualifying impact only: arbitrary file upload/delete, privilege escalation to contributor+, RCE (working PoC), or significant settings change (WordPress options with wide site impact).
+- Admin-notice dismissal only → DROP. IP bypass for non-critical action → DROP.
 
 **[ ] UNSERIALIZE CHECK**
 - `unserialize()` / `maybe_unserialize()` / base64+unserialize on attacker input?
 - Confirm usable POP chain in WP core, WooCommerce, or loaded dependency.
 
 **[ ] FILE OPERATION CHECK**
-- Read: path user-controlled? `basename()`/`realpath()` constrain it? No working traversal → out.
-- Upload: `wp_check_filetype` used? `.phtml`-only → out.
-- Delete: can Subscriber/Customer delete arbitrary files?
+- Read/LFI: path user-controlled? Full control over BOTH path AND extension required.
+  - `basename()`/`realpath()` constrain it? No working directory-traversal exploit → DROP.
+  - Constrained-path LFI → DROP unless traversal bypass works end-to-end.
+  - Windows-specific bypass techniques (e.g. backslash tricks) → excluded → DROP.
+- Upload: full control over BOTH path AND extension required. `.phtml`-only or other legacy extensions without full ext control → DROP.
+- Delete: can Subscriber/Customer delete arbitrary files with full path control?
 
 **[ ] CHANGELOG / PATCH CHECK**
 - Read readme.txt changelog. Bug exists in LATEST version? If patched → drop.
@@ -298,12 +326,33 @@ Examples:
 
 1. CVSS v3.1 < 6.5 = drop. AC:H = drop. No exceptions.
 2. Zero admin-required findings. `manage_options` or admin-only nonce = drop.
-3. Custom roles must be ≤ Subscriber/Customer caps. Elevated = drop.
-4. Zero speculation. No working PoC = not in the main list.
-5. Nonce not bypassable if lower roles cannot independently obtain it.
-6. Trace source → sink fully. No reachable path = no finding.
-7. Non-guessable identifier required for impact = drop.
-8. Verify bug in LATEST version; check changelog. Patched = drop.
-9. Consolidate same-type findings into one report.
-10. Zero confirmed findings → say so explicitly, list everything in Skipped.
-11. Do NOT auto-run exploits or modify the database without explicit confirmation.
+3. Standard program: only Unauthenticated / Subscriber / Customer (contributor+ = mVDP only, may not earn XP).
+4. Custom roles must be ≤ Subscriber/Customer caps. Elevated = drop.
+5. Zero speculation. No working PoC = not in the main list.
+6. Nonce not bypassable if lower roles cannot independently obtain it.
+7. Trace source → sink fully. No reachable path = no finding.
+8. Non-guessable identifier required for impact = drop (e.g. long random subscription hash).
+9. Verify bug in LATEST version; check changelog. Patched = drop.
+10. Consolidate same-type findings into one report.
+11. Zero confirmed findings → say so explicitly, list everything in Skipped.
+12. Do NOT auto-run exploits or modify the database without explicit confirmation.
+13. Vulnerabilities that only exist because an admin explicitly configured the plugin that way = drop.
+14. Vulnerabilities where the plugin's Permissions UI lets admins grant a capability to a lower role = drop (expected functionality).
+15. Re-ordering data, clearing cache, triggering cronjobs/scheduled tasks = not a vulnerability.
+
+## Out-of-Scope Reference (auto-drop, no report)
+
+**Always rejected — never report these:**
+- Full path disclosure, sensitive data enumeration, content spoofing
+- Race conditions (below CVSS 7.1), blind SSRF (no concrete impact demonstrated)
+- Open redirects, CRLF injection, XXE on non-impactful sinks, CSV injection, clickjacking, cross-frame scripting
+- 2FA bypass (AC:H — needs the password, so complexity is High)
+- Lack of brute-force protection / rate-limiting on login (except login TOTP and sequential filenames)
+- Account creation with role below Contributor
+- Private/draft post or page disclosure (unless post type leaks extremely sensitive data)
+- API key leakage without demonstrated significant impact
+- Contributor-level stored XSS, HTML-only injection, CSS injection
+- Authenticated shortcode issues without sensitive data disclosure
+- AI feature token exhaustion
+- CAPTCHA bypasses, IP spoofing
+- DoS via excessive user-input volume against expected functionality
