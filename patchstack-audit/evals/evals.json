@@ -1,0 +1,23 @@
+{
+  "skill_name": "patchstack-audit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "audit this plugin for patchstack: C:\\laragon\\www\\wp-content\\plugins\\business-directory-plugin",
+      "expected_output": "Eligibility gate check from readme.txt, full entry point map (wp_ajax, REST, admin_post), pre-report checklist applied to each finding, at least one structured Finding block with CVSS vector and PoC OR explicit Skipped section if nothing clears 6.5, and final section with Submission Priority and Skipped Issues.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "check this plugin for vulnerabilities I can report to patchstack: C:\\laragon\\www\\wp-content\\plugins\\car-rental-manager",
+      "expected_output": "Eligibility gate check, REST namespace confirmed if applicable, all AJAX/REST routes mapped, each potential finding filtered through CVSS gate and identifier realism check, final section with submission priority and skipped list.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/patchstack-audit C:\\laragon\\www\\wp-content\\plugins\\announce-from-the-dashboard",
+      "expected_output": "Eligibility gate, entry point mapping, source-to-sink trace on any state-changing actions, CVSS scored for each candidate, structured findings or explicit zero-findings result with Skipped section explaining why each was dropped.",
+      "files": []
+    }
+  ]
+}
